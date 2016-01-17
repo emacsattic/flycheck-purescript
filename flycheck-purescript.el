@@ -67,7 +67,10 @@ The topmost match has precedence."
   :risky t)
 
 (flycheck-def-option-var flycheck-purescript-compile-output-dir nil psc
-  "Directory where will be compiled the purescript sources."
+  "Directory where will be compiled the purescript sources.
+
+If is a relative path is considered relative to project root is
+one is bound."
   :type '(choice (const :tag "None" nil)
                  (directory :tag "Custom project root"))
   :risky t)
@@ -102,16 +105,6 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   "Return a glob for PureScript bower sources in DIRECTORY."
   (let ((bowerdir (flycheck-purescript-read-bowerrc-directory directory)))
     (concat (file-name-as-directory bowerdir) "purescript-*/src/")))
-
-(defun flycheck-purescript-process-str (command &rest args)
-  "Execute COMMAND with ARGS, returning the first line of its output.
-
-If there is no output return nil."
-  (with-temp-buffer
-    (apply #'process-file command nil (list t nil) nil args)
-    (unless (bobp)
-      (goto-char (point-min))
-      (buffer-substring-no-properties (point) (line-end-position)))))
 
 (defun psci-read-bowerrc-directory (&optional directory)
   "Read directories defined in DIRECTORY."
@@ -164,14 +157,17 @@ If there is no output return nil."
             "--verbose-errors"          ; verbose errors
             "--json-errors"             ; json errors Purescript>=0.8
             "--output" (eval (if flycheck-purescript-compile-output-dir
-                                 flycheck-purescript-compile-output-dir
+                                 (if (and (not (file-name-absolute-p flycheck-purescript-compile-output-dir))
+                                          flycheck-purescript-project-root)
+                                     (expand-file-name flycheck-purescript-compile-output-dir flycheck-purescript-project-root)
+                                   flycheck-purescript-compile-output-dir)
                                (flycheck-substitute-argument 'temporary-directory 'psc)))
             (eval (if flycheck-purescript-project-root
                       (flycheck-purescript-purs-flags flycheck-purescript-project-root)
                     (flycheck-substitute-argument 'source 'psc))))
   :error-parser flycheck-purescript-parse-errors
   :predicate (lambda ()
-               (string-prefix-p "0.8" (flycheck-purescript-process-str "psc" "--version")))
+               (string-prefix-p "0.8" (shell-command-to-string "psc --version")))
   :modes purescript-mode)
 
 ;;;###autoload
