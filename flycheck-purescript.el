@@ -27,12 +27,14 @@
 
 ;;; Commentary:
 ;;
-;; > Note: Use --json-errors flag available in PureScript>=0.8, for older
-;; > versions, you can use: https://github.com/emacs-pe/purescript-mode/blob/4aca396/flycheck-purescript.el
+;; > Note: `flycheck-purescript.el' uses --json-errors flag available in
+;; > PureScript>=0.8, for older versions, you can use:
+;; > https://github.com/emacs-pe/purescript-mode/blob/4aca396/flycheck-purescript.el
 ;;
 ;; ## Setup
 ;;
-;;     (add-hook 'purescript-mode-hook #'flycheck-purescript-setup)
+;;     (eval-after-load 'flycheck
+;;       '(flycheck-purescript-setup))
 
 ;;; Code:
 (eval-when-compile
@@ -173,17 +175,21 @@ If there is no output return nil."
   :modes purescript-mode)
 
 ;;;###autoload
-(defun flycheck-purescript-setup ()
-  "Setup Flycheck for psc.
-
-Add `psc' to `flycheck-checkers'."
+(defun flycheck-purescript-configure ()
+  "Set PureScript project root for the current project."
   (interactive)
   (when (buffer-file-name)
     (-when-let (root-dir (flycheck-purescript-project-root))
       (setq-local flycheck-purescript-project-root root-dir))))
 
 ;;;###autoload
-(eval-after-load 'flycheck '(add-to-list 'flycheck-checkers 'psc))
+(defun flycheck-purescript-setup ()
+  "Setup PureScript support for Flycheck.
+
+Add `psc' to `flycheck-checkers'."
+  (interactive)
+  (add-to-list 'flycheck-checkers 'psc)
+  (add-hook 'flycheck-mode-hook #'flycheck-purescript-configure))
 
 (provide 'flycheck-purescript)
 
