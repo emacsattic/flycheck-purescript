@@ -106,11 +106,6 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   (let ((bowerdir (flycheck-purescript-read-bowerrc-directory directory)))
     (concat (file-name-as-directory bowerdir) "purescript-*/src/")))
 
-(defun psci-read-bowerrc-directory (&optional directory)
-  "Read directories defined in DIRECTORY."
-  (let ((bowerrc (expand-file-name ".bowerrc" directory)))
-    (or (assoc-default 'directory (ignore-errors (json-read-file bowerrc))) "bower_components")))
-
 (defun flycheck-purescript-purs-flags (directory)
   "Calculate the PureScript psc command flags from DIRECTORY."
   (let* ((default-directory (file-name-as-directory (expand-file-name directory)))
