@@ -75,8 +75,7 @@ one is bound."
                  (directory :tag "Custom project root"))
   :risky t)
 
-(flycheck-def-option-var flycheck-purescript-ignore-error-codes
-    nil psc
+(flycheck-def-option-var flycheck-purescript-ignore-error-codes nil psc
   "List of psc error codes to ignore.
 
 The value of this variable is a list of strings, where each
@@ -127,11 +126,13 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   (let (errors)
     (pcase-dolist (`(,level . ,data) (flycheck-purescript-parse-json output))
       (setq level (pcase level
-                    (`errors 'error)
-                    (`warnings 'warning)))
+                    (`errors   'error)
+                    (`warnings 'warning)
+                    ;; Default to error for unknown .level
+                    (_         'error)))
       (seq-do (lambda (e)
                 (let-alist e
-                  (when (not (member .errorCode flycheck-purescript-ignore-error-codes))
+                  (unless (member .errorCode flycheck-purescript-ignore-error-codes)
                     (push (flycheck-error-new-at
                            .position.startLine
                            .position.startColumn
