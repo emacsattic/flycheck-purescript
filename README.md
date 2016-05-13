@@ -3,9 +3,15 @@
 *Author:* Mario Rodas <marsam@users.noreply.github.com><br>
 *Version:* 0.1<br>
 
-> Note: `flycheck-purescript.el` uses --json-errors flag available in
-> PureScript>=0.8, for older versions, you can use:
-> https://github.com/emacs-pe/purescript-mode/blob/4aca396/flycheck-purescript.el
+Currently `flycheck-purescript` compiles the project sources and writes the
+output in a temporal directory, which could be resource intensive, because it
+does each time FlyCheck executes.  Is **recommended** to set the default
+output to a directory:
+
+        (setq-default flycheck-purescript-compile-output-dir "output")
+
+Which will write the output to a "output" directory, relative to project root
+directory.
 
 ## Setup
 
