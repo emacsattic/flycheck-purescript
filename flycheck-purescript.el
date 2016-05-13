@@ -83,6 +83,11 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   :type '(repeat :tag "Extensions" (string :tag "Extension"))
   :safe #'flycheck-string-list-p)
 
+(flycheck-def-option-var flycheck-purescript-bower-dir nil psc
+  "Bower directory."
+  :type '(choice (const :tag "None" nil)
+                 (directory :tag "Custom bower directory")))
+
 (defun purescript-locate-base-directory (&optional directory)
   "Locate a project root DIRECTORY for a purescript project."
   (let ((directory (or directory default-directory)))
@@ -102,7 +107,7 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
 
 (defun flycheck-purescript-bower-directory-glob (&optional directory)
   "Return a glob for PureScript bower sources in DIRECTORY."
-  (let ((bowerdir (flycheck-purescript-read-bowerrc-directory directory)))
+  (let ((bowerdir (or flycheck-purescript-bower-dir (flycheck-purescript-read-bowerrc-directory directory))))
     (concat (file-name-as-directory bowerdir) "purescript-*/src/")))
 
 (defun flycheck-purescript-purs-flags (directory)
@@ -172,7 +177,8 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   (interactive)
   (when (buffer-file-name)
     (-when-let (root-dir (flycheck-purescript-project-root))
-      (setq-local flycheck-purescript-project-root root-dir))))
+      (setq-local flycheck-purescript-project-root root-dir)
+      (setq-local flycheck-purescript-bower-dir (flycheck-purescript-read-bowerrc-directory root-dir)))))
 
 ;;;###autoload
 (defun flycheck-purescript-setup ()
