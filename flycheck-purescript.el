@@ -47,13 +47,14 @@
 (require 'flycheck)
 
 (defcustom flycheck-purescript-project-root-files
-  '(".psci"                             ; PureScript .psci file
-    ".psci_modules"                     ; PureScript .psci_modules directory
-    "bower.json"                        ; Bower project file
+  '("bower.json"                        ; Bower project file
     "package.json"                      ; npm package file
     "gulpfile.js"                       ; Gulp build file
     "Gruntfile.js"                      ; Grunt project file
     "bower_components"                  ; Bower components directory
+    ;; Purescript <0.9 files
+    ".psci"                             ; PureScript .psci file
+    ".psci_modules"                     ; PureScript .psci_modules directory
     )
   "List of files which be considered to locate the project root.
 The topmost match has precedence."
@@ -80,7 +81,17 @@ one is bound."
 
 The value of this variable is a list of strings, where each
 string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
-  :type '(repeat :tag "Extensions" (string :tag "Extension"))
+  :type '(repeat :tag "Ignore errors" (string :tag "error code"))
+  :safe #'flycheck-string-list-p)
+
+(flycheck-def-option-var flycheck-purescript-compile-flags
+    '("--no-magic-do" "--no-tco" "--no-prefix" "--no-opts")
+    psc
+  "List of psc compile flags.
+
+The default flags tries to disable optimizations to make the
+syntax checking fast."
+  :type '(repeat :tag "Flags" (string :tag "flag"))
   :safe #'flycheck-string-list-p)
 
 (flycheck-def-option-var flycheck-purescript-bower-dir nil psc
@@ -88,17 +99,18 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   :type '(choice (const :tag "None" nil)
                  (directory :tag "Custom bower directory")))
 
-(defun purescript-locate-base-directory (&optional directory)
+(defvar-local flycheck-purescript-psc-version nil
+  "Version of PureScript compiler.")
+
+(defun flycheck-purescript-locate-base-directory (&optional directory)
   "Locate a project root DIRECTORY for a purescript project."
-  (let ((directory (or directory default-directory)))
-    (cl-loop for file in flycheck-purescript-project-root-files
-             for project-root-dir = (locate-dominating-file directory file)
-             when project-root-dir
-             return project-root-dir)))
+  (cl-loop for file in flycheck-purescript-project-root-files
+           when (locate-dominating-file (or directory default-directory) file)
+           return it))
 
 (defun flycheck-purescript-project-root (&optional directory)
   "Return a PuresScript project root from DIRECTORY."
-  (or flycheck-purescript-project-root (purescript-locate-base-directory directory)))
+  (or flycheck-purescript-project-root (flycheck-purescript-locate-base-directory directory)))
 
 (defun flycheck-purescript-read-bowerrc-directory (&optional directory)
   "Read directories defined in DIRECTORY."
@@ -111,13 +123,16 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
     (concat (file-name-as-directory bowerdir) "purescript-*/src/")))
 
 (defun flycheck-purescript-purs-flags (directory)
-  "Calculate the PureScript psc command flags from DIRECTORY."
+  "Calculate the PureScript psc command flags from DIRECTORY and PSC-VERSION."
   (let* ((default-directory (file-name-as-directory (expand-file-name directory)))
          (bower-purs (flycheck-purescript-bower-directory-glob)))
-    (list (expand-file-name "**/*.purs" bower-purs)
-          (expand-file-name "src/**/*.purs")
-          "--ffi" (expand-file-name "**/*.js" bower-purs)
-          "--ffi" (expand-file-name "src/**/*.js"))))
+    (if (string-prefix-p "0.9" flycheck-purescript-psc-version)
+        (list (expand-file-name "**/*.purs" bower-purs)
+              (expand-file-name "src/**/*.purs"))
+      (list (expand-file-name "**/*.purs" bower-purs)
+            (expand-file-name "src/**/*.purs")
+            "--ffi" (expand-file-name "**/*.js" bower-purs)
+            "--ffi" (expand-file-name "src/**/*.js")))))
 
 (defun flycheck-purescript-parse-json (output)
   "Read json errors from psc OUTPUT."
@@ -127,7 +142,7 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
     (and errors (json-read-from-string errors))))
 
 (defun flycheck-purescript-parse-errors (output checker buffer)
-  "Do something with OUTPUT and CHECKER inside BUFFER."
+  "Collect errors from psc OUTPUT and CHECKER inside BUFFER."
   (let (errors)
     (pcase-dolist (`(,level . ,data) (flycheck-purescript-parse-json output))
       (setq level (pcase level
@@ -154,7 +169,7 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
 (flycheck-define-checker psc
   "A PureScript syntax checker using psc."
   :command ("psc"
-            "--no-magic-do" "--no-tco" "--no-prefix" "--no-opts" ; disable optimizations
+            (eval flycheck-purescript-compile-flags)
             "--verbose-errors"          ; verbose errors
             "--json-errors"             ; json errors Purescript>=0.8
             "--output" (eval (if flycheck-purescript-compile-output-dir
@@ -167,8 +182,6 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
                       (flycheck-purescript-purs-flags flycheck-purescript-project-root)
                     (flycheck-substitute-argument 'source 'psc))))
   :error-parser flycheck-purescript-parse-errors
-  :predicate (lambda ()
-               (string-prefix-p "0.8" (shell-command-to-string "psc --version")))
   :modes purescript-mode)
 
 ;;;###autoload
@@ -176,6 +189,7 @@ string is a name of an error code to ignore (e.g. \"MissingTypeDeclaration\")."
   "Set PureScript project root for the current project."
   (interactive)
   (when (buffer-file-name)
+    (setq flycheck-purescript-psc-version (shell-command-to-string "psc --version"))
     (-when-let (root-dir (flycheck-purescript-project-root))
       (setq-local flycheck-purescript-project-root root-dir)
       (setq-local flycheck-purescript-bower-dir (flycheck-purescript-read-bowerrc-directory root-dir)))))
