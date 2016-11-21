@@ -39,12 +39,33 @@
 ;;; Code:
 (eval-when-compile
   (require 'pcase)
-  (require 'let-alist))
+  (require 'let-alist)
+  (require 'subr-x nil 'no-error))
 
 (require 'seq)
 (require 'json)
 (require 'dash)
 (require 'flycheck)
+
+(eval-and-compile
+  ;; TODO: Remove when dropping support for Emacs 24.3 and earlier
+  (unless (featurep 'subr-x)
+    ;; `subr-x' function for Emacs 24.3 and below
+    (defsubst string-trim-left (string)
+      "Remove leading whitespace from STRING."
+      (if (string-match "\\`[ \t\n\r]+" string)
+          (replace-match "" t t string)
+        string))
+
+    (defsubst string-trim-right (string)
+      "Remove trailing whitespace from STRING."
+      (if (string-match "[ \t\n\r]+\\'" string)
+          (replace-match "" t t string)
+        string))
+
+    (defsubst string-trim (string)
+      "Remove leading and trailing whitespace from STRING."
+      (string-trim-left (string-trim-right string)))))
 
 (defcustom flycheck-purescript-project-root-files
   '("bower.json"                        ; Bower project file
@@ -99,8 +120,8 @@ syntax checking fast."
   :type '(choice (const :tag "None" nil)
                  (directory :tag "Custom bower directory")))
 
-(defvar-local flycheck-purescript-psc-version nil
-  "Version of PureScript compiler.")
+(defvar-local flycheck-purescript-purs-flags nil
+  "Flags used to execute psc.")
 
 (defun flycheck-purescript-locate-base-directory (&optional directory)
   "Locate a project root DIRECTORY for a purescript project."
@@ -126,13 +147,17 @@ syntax checking fast."
   "Calculate the PureScript psc command flags from DIRECTORY and PSC-VERSION."
   (let* ((default-directory (file-name-as-directory (expand-file-name directory)))
          (bower-purs (flycheck-purescript-bower-directory-glob)))
-    (if (string-prefix-p "0.9" flycheck-purescript-psc-version)
+    (if (version<= "0.9" (flycheck-purescript-psc-version))
         (list (expand-file-name "**/*.purs" bower-purs)
               (expand-file-name "src/**/*.purs"))
       (list (expand-file-name "**/*.purs" bower-purs)
             (expand-file-name "src/**/*.purs")
             "--ffi" (expand-file-name "**/*.js" bower-purs)
             "--ffi" (expand-file-name "src/**/*.js")))))
+
+(defun flycheck-purescript-psc-version ()
+  "Return the psc version."
+  (string-trim (shell-command-to-string "psc --version")))
 
 (defun flycheck-purescript-parse-json (output)
   "Read json errors from psc OUTPUT."
@@ -173,14 +198,11 @@ syntax checking fast."
             "--verbose-errors"          ; verbose errors
             "--json-errors"             ; json errors Purescript>=0.8
             "--output" (eval (if flycheck-purescript-compile-output-dir
-                                 (if (and (not (file-name-absolute-p flycheck-purescript-compile-output-dir))
-                                          flycheck-purescript-project-root)
-                                     (expand-file-name flycheck-purescript-compile-output-dir flycheck-purescript-project-root)
-                                   flycheck-purescript-compile-output-dir)
+                                 flycheck-purescript-compile-output-dir
                                (flycheck-substitute-argument 'temporary-directory 'psc)))
-            (eval (if flycheck-purescript-project-root
-                      (flycheck-purescript-purs-flags flycheck-purescript-project-root)
-                    (flycheck-substitute-argument 'source 'psc))))
+            (eval flycheck-purescript-purs-flags))
+  :working-directory (lambda (_checker) (flycheck-purescript-project-root))
+  :enabled (lambda () (flycheck-purescript-project-root))
   :error-parser flycheck-purescript-parse-errors
   :modes purescript-mode)
 
@@ -189,10 +211,9 @@ syntax checking fast."
   "Set PureScript project root for the current project."
   (interactive)
   (when (buffer-file-name)
-    (setq flycheck-purescript-psc-version (shell-command-to-string "psc --version"))
     (-when-let (root-dir (flycheck-purescript-project-root))
       (setq-local flycheck-purescript-project-root root-dir)
-      (setq-local flycheck-purescript-bower-dir (flycheck-purescript-read-bowerrc-directory root-dir)))))
+      (setq-local flycheck-purescript-purs-flags (flycheck-purescript-purs-flags root-dir)))))
 
 ;;;###autoload
 (defun flycheck-purescript-setup ()
